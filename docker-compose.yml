@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Database
+  db:
+    image: mysql:8.0.23
+    volumes:
+      - ./.docker/mysql/config.cnf:/etc/mysql/conf.d/config.cnf
+      - ./.data/mysql:/var/lib/mysql
+    restart: always
+    ports:
+      - '3301:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    networks:
+      - wp-docker-environment
+
+  # phpmyadmin
+  phpmyadmin:
+    depends_on:
+      - db
+    image: phpmyadmin
+    restart: always
+    ports:
+      - '8080:80'
+    environment:
+      PMA_HOST: db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - wp-docker-environment
+
+  # Wordpress
+  wordpress:
+    build: ./.docker/php
+    depends_on:
+      - db
+    restart: always
+    volumes:
+      - ./.data/wp:/var/www/html
+      - ./wp-content:/var/www/html/wp-content
+      - ./.docker/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_DEBUG: 1
+      WORDPRESS_CONFIG_EXTRA:
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+    networks:
+      - wp-docker-environment
+
+  # Server
+  nginx:
+    build: ./.docker/nginx
+    depends_on:
+      - wordpress
+    ports:
+      - '8000:80'
+    restart: always
+    volumes:
+      - ./.data/wp:/var/www/html
+      - ./wp-content:/var/www/html/wp-content
+      - ./.data/logs/nginx:/var/log/nginx
+    networks:
+      - wp-docker-environment
+
+  # MailHog
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - '1025:1025' # smtp server
+      - '8025:8025' # web ui
+    networks:
+      - wp-docker-environment
+
+networks:
+  wp-docker-environment:
+    driver: bridge
